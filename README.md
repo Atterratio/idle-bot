@@ -11,7 +11,7 @@ I'm not shire that this work on Mac or Windows, or Python2.
 Changes
 -------
 * Fix Comminity parcing(20161219)
-* No "GIU"
+* No "GUI"
 * No Sorting
 * MultyGaming
 * Python3
