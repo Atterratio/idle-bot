@@ -111,7 +111,8 @@ def main():
 
     log.info("Idle Master needs to idle %s games for %s cards" % (len(badgesLeft), cardsLeft))
 
-    idleThreads += threading.active_count()
+    startThreads = threading.active_count()
+    idleThreads += startThreads
     threads_num = threading.active_count()
     event = threading.Event()
     event.set()
@@ -123,20 +124,21 @@ def main():
             if threads_num < idleThreads:
                 thread = threading.Thread(target=idle_thread, args=(game, idleTime, cookies, event))
                 thread.start()
-                time.sleep(1)
                 break
             else:
-                time.sleep(10)
+                time.sleep(15)
 
-    while threads_num > idleThreads:
-        log.debug("Number of threads: %s" % len(threading.enumerate()))
-        time.sleep(idleTime)
+    while threads_num > startThreads:
+        log.debug("Threads left: %s" % threading.active_count())
+        time.sleep(15)
         threads_num = threading.active_count()
 
     if event.is_set():
         log.info("Stop Idle")
+        sys.exit(0)
     else:
         log.error("Couldn't initialize Steam API")
+        sys.exit(1)
 
 
 def idle_thread(game, idleTime, cookies, event):
@@ -149,14 +151,13 @@ def idle_thread(game, idleTime, cookies, event):
 
         while badgeDropLeft > 0:
             if sys.platform.startswith('win32'):
-                process_idle = subprocess.Popen(["steam-idle.py", str(gameId)], stdout=sp_out,
-                                            stderr=sp_out)
+                process_idle = subprocess.Popen(["steam-idle.py", str(gameId)], stdin=subprocess.PIPE,
+                                                stdout=subprocess.PIPE, stderr=sp_out)
             else:
-                process_idle = subprocess.Popen(["./steam-idle.py", str(gameId)], stdout=sp_out,
-                                                stderr=sp_out)
-
-            process_idle.communicate()
-            idle_crash = int(process_idle.returncode)
+                process_idle = subprocess.Popen(["./steam-idle.py", str(gameId)], stdin=subprocess.PIPE,
+                                                stdout=subprocess.PIPE, stderr=sp_out)
+            time.sleep(5)
+            idle_crash = process_idle.poll()
             if idle_crash:
                 event.clear()
                 sys.exit()
@@ -165,9 +166,8 @@ def idle_thread(game, idleTime, cookies, event):
             time.sleep(idleTime)
 
             log.debug("Check cards left for «%s» game" % gameTitle)
-            process_idle.terminate()
-            process_idle.communicate()
-            time.sleep(10)
+            process_idle.communicate("0".encode())
+            time.sleep(5)
             badge_req = requests.get(badgeURL, cookies=cookies)
             badgeRawData = bs4.BeautifulSoup(badge_req.text, "lxml")
             badgeDropLeftOld = badgeDropLeft

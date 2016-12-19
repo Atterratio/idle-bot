@@ -4,6 +4,7 @@ import os
 import sys
 import platform
 import logging
+import time
 
 from ctypes import CDLL
 
@@ -41,16 +42,28 @@ if __name__ == '__main__':
     if len(sys.argv) != 2:
         log.error("Wrong number of arguments")
         sys.exit(1)
-        
+
     str_app_id = sys.argv[1]
-    
+
     os.environ["SteamAppId"] = str_app_id
+    signal = 1
+    steam_api = get_steam_api()
     try:
-        status = int(get_steam_api().SteamAPI_Init())
-        log.debug("Steam api init status: %s" % status)
+        status = int(steam_api.SteamAPI_Init())
         if not status:
             log.error("Couldn't initialize Steam API")
             sys.exit(1)
+
+        while signal:
+            signal = int(input())
+            log.debug("Recive signal: %s" % signal)
+
+        #steam_api.SteamAPI_Shutdown()
+
+        sys.exit(0)
+
+    except (EOFError, ValueError):
+        pass
     except:
         log.error("Couldn't initialize Steam API")
         sys.exit(1)
