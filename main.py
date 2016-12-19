@@ -123,9 +123,10 @@ def main():
             if threads_num < idleThreads:
                 thread = threading.Thread(target=idle_thread, args=(game, idleTime, cookies, event))
                 thread.start()
+                time.sleep(1)
                 break
             else:
-                time.sleep(5)
+                time.sleep(10)
 
     while threads_num > idleThreads:
         log.debug("Number of threads: %s" % len(threading.enumerate()))
@@ -166,7 +167,7 @@ def idle_thread(game, idleTime, cookies, event):
             log.debug("Check cards left for «%s» game" % gameTitle)
             process_idle.terminate()
             process_idle.communicate()
-            time.sleep(5)
+            time.sleep(10)
             badge_req = requests.get(badgeURL, cookies=cookies)
             badgeRawData = bs4.BeautifulSoup(badge_req.text, "lxml")
             badgeDropLeftOld = badgeDropLeft
