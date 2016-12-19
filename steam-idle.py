@@ -62,7 +62,7 @@ if __name__ == '__main__':
 
         sys.exit(0)
 
-    except (EOFError, ValueError):
+    except EOFError:
         pass
     except:
         log.error("Couldn't initialize Steam API")

@@ -124,6 +124,7 @@ def main():
             if threads_num < idleThreads:
                 thread = threading.Thread(target=idle_thread, args=(game, idleTime, cookies, event))
                 thread.start()
+                time.sleep(1)
                 break
             else:
                 time.sleep(15)
@@ -158,6 +159,12 @@ def idle_thread(game, idleTime, cookies, event):
                                                 stdout=subprocess.PIPE, stderr=sp_out)
             time.sleep(5)
             idle_crash = process_idle.poll()
+            if idle_crash:
+                event.clear()
+                sys.exit()
+
+            process_idle.communicate()
+            idle_crash = int(process_idle.returncode)
             if idle_crash:
                 event.clear()
                 sys.exit()
