@@ -125,10 +125,12 @@ def main():
             else:
                 time.sleep(idleTime)
 
-    while threads_num > 1:
+    while threads_num > idleThreads:
         log.debug("Number of threads: %s" % len(threading.enumerate()))
         time.sleep(idleTime)
-        threads_num = len(threading.enumerate())
+        threads_num = threading.active_count()
+
+    log.info("Stop Idle")
 
 
 def idle_thread(game, idleTime, cookies):
