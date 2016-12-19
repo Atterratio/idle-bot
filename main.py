@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import os
 import sys
 import logging
 import configparser
@@ -124,7 +123,7 @@ def main():
                 thread.start()
                 break
             else:
-                time.sleep(idleTime // idleThreads)
+                time.sleep(idleTime)
 
     while threads_num > 1:
         log.debug("Number of threads: %s" % len(threading.enumerate()))
@@ -160,7 +159,7 @@ def idle_thread(game, idleTime, cookies):
             badgeDropLeftOld = badgeDropLeft
             badgeDropLeft = int(re.findall("\d+", badgeRawData.find("span", {"class": "progress_info_bold"}).get_text())[0])
             if badgeDropLeft > 0 and badgeDropLeftOld != badgeDropLeft:
-                log.info("Idle game «%s» to get %s cards" % (gameTitle, badgeDropLeft))
+                log.info("Continuing idle game «%s» to get %s cards" % (gameTitle, badgeDropLeft))
 
         log.info("End «%s» game idle " % gameTitle)
 
