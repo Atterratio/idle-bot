@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import os
 import sys
@@ -8,19 +8,31 @@ import requests
 import re
 import subprocess
 import time
-import signal
+import threading
 
 import bs4
+
+from optparse import OptionParser
+
+parser = OptionParser()
+parser.add_option("--debug", action="store_true", dest="debug", default=False, help="Enable debug messanges")
+options, args = parser.parse_args()
 
 log = logging.getLogger('Main')
 formatter = logging.Formatter('[%(asctime)s][%(name)s][%(levelname)s]: %(message)s')
 console = logging.StreamHandler()
 console.setFormatter(formatter)
 log.addHandler(console)
-log.setLevel(logging.DEBUG)
+if options.debug == True:
+    log.setLevel(logging.DEBUG)
+    sp_out = None
+else:
+    log.setLevel(logging.INFO)
+    sp_out = subprocess.DEVNULL
 
 
 def main():
+
     log.info("WELCOME TO PYTHON IDLE MASTER REBORN")
     config = configparser.ConfigParser()
     try:
@@ -38,12 +50,16 @@ def main():
         if not idleTime:
             idleTime = 600
 
+        idleThreads = int(config["main"]["idlethreads"])
+        if not idleThreads:
+            idleThreads = 1
+
         if not sessionId or not steamLogin:
             sys.exit()
 
     except FileNotFoundError:
         log.error("No config file. Create empty.")
-        config["main"] = {"idletime": 600}
+        config["main"] = {"idletime": 600, "idlethreads": 1}
         config["auth"] = {"sessionid": "", "steamlogin": ""}
         configfile = open('config.ini', 'w')
         config.write(configfile)
@@ -57,7 +73,7 @@ def main():
     # TODO: catch exceptions
     badges_req = requests.get("%s/badges/" % myProfileURL, cookies=cookies)
 
-    badgePageData = bs4.BeautifulSoup(badges_req.text)
+    badgePageData = bs4.BeautifulSoup(badges_req.text, "lxml")
 
     loged = badgePageData.find("a",{"class": "user_avatar"}) != None
     if not loged:
@@ -71,10 +87,11 @@ def main():
 
     badgeSet = []
     badgesLeft = []
+    cardsLeft = 0
     currentpage = 1
     while currentpage <= badgePages:
         badges_req = requests.get("%(url)s?p=%(page)s" % {"url": myBadgesURL, "page": currentpage}, cookies=cookies)
-        badgePageData = bs4.BeautifulSoup(badges_req.text)
+        badgePageData = bs4.BeautifulSoup(badges_req.text, "lxml")
         badgeSet = badgeSet + badgePageData.find_all("div", {"class": "badge_row"})
         currentpage = currentpage + 1
 
@@ -91,10 +108,31 @@ def main():
             badgeData = {"id": badgeId, "url": badgeURL, "title": badgeTitle, "cards": dropCount}
 
             badgesLeft.append(badgeData)
+            cardsLeft += dropCount
 
-    log.info("Idle Master needs to idle %s games" % len(badgesLeft))
+    log.info("Idle Master needs to idle %s games for %s cards" % (len(badgesLeft), cardsLeft))
+
+    idleThreads += threading.active_count()
+    threads_num = threading.active_count()
 
     for game in badgesLeft:
+        while True:
+            threads_num = threading.active_count()
+            log.debug("Number of threads: %s" % threads_num)
+            if threads_num < idleThreads:
+                thread = threading.Thread(target=idle_thread, args=(game, idleTime, cookies))
+                thread.start()
+                break
+            else:
+                time.sleep(idleTime // idleThreads)
+
+    while threads_num > 1:
+        log.debug("Number of threads: %s" % len(threading.enumerate()))
+        time.sleep(idleTime)
+        threads_num = len(threading.enumerate())
+
+
+def idle_thread(game, idleTime, cookies):
         gameId = game["id"]
         badgeURL = game["url"]
         badgeDropLeft = game["cards"]
@@ -103,7 +141,12 @@ def main():
         log.info("Starting idle game «%s» to get %s cards" % (gameTitle, badgeDropLeft))
 
         while badgeDropLeft > 0:
-            process_idle = subprocess.Popen(["./steam-idle.py", str(gameId)])
+            if sys.platform.startswith('win32'):
+                process_idle = subprocess.Popen(["steam-idle.py", str(gameId)], stdout=sp_out,
+                                            stderr=sp_out)
+            else:
+                process_idle = subprocess.Popen(["./steam-idle.py", str(gameId)], stdout=sp_out,
+                                                stderr=sp_out)
 
             log.debug("Idle %02d:%02d min." % divmod(idleTime, 60))
             time.sleep(idleTime)
@@ -113,13 +156,14 @@ def main():
             process_idle.communicate()
             time.sleep(15)
             badge_req = requests.get(badgeURL, cookies=cookies)
-            badgeRawData = bs4.BeautifulSoup(badge_req.text)
+            badgeRawData = bs4.BeautifulSoup(badge_req.text, "lxml")
             badgeDropLeftOld = badgeDropLeft
             badgeDropLeft = int(re.findall("\d+", badgeRawData.find("span", {"class": "progress_info_bold"}).get_text())[0])
             if badgeDropLeft > 0 and badgeDropLeftOld != badgeDropLeft:
                 log.info("Idle game «%s» to get %s cards" % (gameTitle, badgeDropLeft))
 
         log.info("End «%s» game idle " % gameTitle)
+
 
 if __name__ == '__main__':
     main()
