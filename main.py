@@ -100,25 +100,26 @@ def main():
         badgeDropLeft = game["cards"]
         gameTitle = game["title"]
 
-        log.info("Starting game «%s» to idle %s cards" % (gameTitle, badgeDropLeft))
+        log.info("Starting idle game «%s» to get %s cards" % (gameTitle, badgeDropLeft))
 
         while badgeDropLeft > 0:
             process_idle = subprocess.Popen(["./steam-idle.py", str(gameId)])
 
-            log.info("Idle %s min." % (idleTime // 60))
+            log.debug("Idle %02d:%02d min." % divmod(idleTime, 60))
             time.sleep(idleTime)
 
-            log.info("Check cards left for «%s» game" % gameTitle)
+            log.debug("Check cards left for «%s» game" % gameTitle)
             process_idle.terminate()
             process_idle.communicate()
-            time.sleep(10)
+            time.sleep(15)
             badge_req = requests.get(badgeURL, cookies=cookies)
             badgeRawData = bs4.BeautifulSoup(badge_req.text)
+            badgeDropLeftOld = badgeDropLeft
             badgeDropLeft = int(re.findall("\d+", badgeRawData.find("span", {"class": "progress_info_bold"}).get_text())[0])
+            if badgeDropLeft > 0 and badgeDropLeftOld != badgeDropLeft:
+                log.info("Idle game «%s» to get %s cards" % (gameTitle, badgeDropLeft))
 
         log.info("End «%s» game idle " % gameTitle)
 
 if __name__ == '__main__':
     main()
-
-

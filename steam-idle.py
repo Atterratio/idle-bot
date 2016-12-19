@@ -41,7 +41,7 @@ def get_steam_api():
         steam_api = CDLL('./libsteam_api.dylib')
     else:
         log.info('Operating system not supported')
-        sys.exit()
+        sys.exit(1)
         
     return steam_api
     
