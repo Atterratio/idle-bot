@@ -113,27 +113,32 @@ def main():
 
     idleThreads += threading.active_count()
     threads_num = threading.active_count()
+    event = threading.Event()
+    event.set()
 
     for game in badgesLeft:
-        while True:
+        while event.is_set():
             threads_num = threading.active_count()
             log.debug("Number of threads: %s" % threads_num)
             if threads_num < idleThreads:
-                thread = threading.Thread(target=idle_thread, args=(game, idleTime, cookies))
+                thread = threading.Thread(target=idle_thread, args=(game, idleTime, cookies, event))
                 thread.start()
                 break
             else:
-                time.sleep(idleTime)
+                time.sleep(5)
 
     while threads_num > idleThreads:
         log.debug("Number of threads: %s" % len(threading.enumerate()))
         time.sleep(idleTime)
         threads_num = threading.active_count()
 
-    log.info("Stop Idle")
+    if event.is_set():
+        log.info("Stop Idle")
+    else:
+        log.error("Couldn't initialize Steam API")
 
 
-def idle_thread(game, idleTime, cookies):
+def idle_thread(game, idleTime, cookies, event):
         gameId = game["id"]
         badgeURL = game["url"]
         badgeDropLeft = game["cards"]
@@ -152,7 +157,7 @@ def idle_thread(game, idleTime, cookies):
             process_idle.communicate()
             idle_crash = int(process_idle.returncode)
             if idle_crash:
-                log.error("Couldn't initialize Steam API")
+                event.clear()
                 sys.exit()
 
             log.debug("Idle %02d:%02d min." % divmod(idleTime, 60))
@@ -161,7 +166,7 @@ def idle_thread(game, idleTime, cookies):
             log.debug("Check cards left for «%s» game" % gameTitle)
             process_idle.terminate()
             process_idle.communicate()
-            time.sleep(15)
+            time.sleep(5)
             badge_req = requests.get(badgeURL, cookies=cookies)
             badgeRawData = bs4.BeautifulSoup(badge_req.text, "lxml")
             badgeDropLeftOld = badgeDropLeft
