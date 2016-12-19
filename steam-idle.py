@@ -40,14 +40,18 @@ def get_steam_api():
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         log.error("Wrong number of arguments")
-        sys.exit()
+        sys.exit(1)
         
     str_app_id = sys.argv[1]
     
     os.environ["SteamAppId"] = str_app_id
     try:
-        get_steam_api().SteamAPI_Init()
+        status = int(get_steam_api().SteamAPI_Init())
+        log.debug("Steam api init status: %s" % status)
+        if not status:
+            log.error("Couldn't initialize Steam API")
+            sys.exit(1)
     except:
         log.error("Couldn't initialize Steam API")
-        sys.exit()
+        sys.exit(1)
     

@@ -149,6 +149,12 @@ def idle_thread(game, idleTime, cookies):
                 process_idle = subprocess.Popen(["./steam-idle.py", str(gameId)], stdout=sp_out,
                                                 stderr=sp_out)
 
+            process_idle.communicate()
+            idle_crash = int(process_idle.returncode)
+            if idle_crash:
+                log.error("Couldn't initialize Steam API")
+                sys.exit()
+
             log.debug("Idle %02d:%02d min." % divmod(idleTime, 60))
             time.sleep(idleTime)
 
