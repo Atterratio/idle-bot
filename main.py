@@ -158,14 +158,9 @@ def idle_thread(game, idleTime, cookies, event):
             else:
                 process_idle = subprocess.Popen(["./steam-idle.py", str(gameId)], stdin=subprocess.PIPE,
                                                 stdout=subprocess.PIPE, stderr=sp_out)
+
             time.sleep(5)
             idle_crash = process_idle.poll()
-            if idle_crash:
-                event.clear()
-                sys.exit()
-
-            process_idle.communicate()
-            idle_crash = int(process_idle.returncode)
             if idle_crash:
                 event.clear()
                 sys.exit()
