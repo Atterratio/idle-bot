@@ -129,6 +129,7 @@ def main():
             else:
                 time.sleep(15)
 
+    threads_num = threading.active_count()
     while threads_num > startThreads:
         log.debug("Threads left: %s" % threading.active_count())
         time.sleep(15)
