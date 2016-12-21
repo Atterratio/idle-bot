@@ -8,7 +8,6 @@ import requests
 import re
 import subprocess
 import time
-import threading
 import multiprocessing
 import platform
 
@@ -107,9 +106,8 @@ class IdleBot:
 
         log.info("Idle Master needs to idle %s games for %s cards" % (len(badgesLeft), cardsLeft))
 
-        work = True
         for game in badgesLeft:
-            while work:
+            while True:
                 processesNum = len(multiprocessing.active_children())
                 log.debug("Number of children processes: %s" % processesNum)
 
