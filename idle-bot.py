@@ -140,8 +140,11 @@ class IdleBot:
 
             while badgeDropLeft > 0:
                 os.environ["SteamAppId"] = str(gameId)
-
+                stderr = os.dup(2)
+                silent = os.open(os.devnull, os.O_WRONLY)
+                os.dup2(silent, 2)
                 apiInit = int(steam_api.SteamAPI_Init())
+                os.dup2(stderr, 2)
                 if not apiInit:
                     raise SteanApiError("Couldn't initialize Steam API")
 
@@ -206,7 +209,7 @@ if __name__ == '__main__':
     try:
         config.read_file(open("config.ini"))
     except FileNotFoundError:
-        log.error("No config file. Please copy «exaple.ini» as «config.ini» and edit it.")
+        log.error("No config file. Please copy «example.ini» as «config.ini» and edit it.")
         sys.exit()
 
     idleBot = IdleBot(config, log=log)
