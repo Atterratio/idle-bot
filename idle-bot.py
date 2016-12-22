@@ -20,7 +20,7 @@ class Error(Exception):
     name = None
     def __init__(self, message):
         self.message = message
-        log = logging.getLogger()
+        log = logging.getLogger(self.name)
         formatter = logging.Formatter('[%(asctime)s][%(name)s][%(processName)s][%(levelname)s]: %(message)s', "%Y-%m-%d %H:%M:%S")
         console = logging.StreamHandler()
         console.setFormatter(formatter)
@@ -29,16 +29,16 @@ class Error(Exception):
 
         log.error(message)
 
-class AuthError(Exception):
+class AuthError(Error):
     name = "Auth"
 
-class SteanApiError(Exception):
+class SteamApiError(Error):
     name = "Steam Api"
 
-class ArchitectureError(Exception):
+class ArchitectureError(Error):
     pass
 
-class OSError(Exception):
+class OSError(Error):
     pass
 
 class IdleBot:
@@ -61,6 +61,9 @@ class IdleBot:
             self.log = logging.NullHandler()
         else:
             self.log = log
+
+        self.idle = False
+        self.err_queue = multiprocessing.Queue()
 
     def start(self):
         profileURL = "http://steamcommunity.com/profiles/%s" % config["auth"]["steamLogin"][:17]
@@ -108,27 +111,38 @@ class IdleBot:
 
         for game in badgesLeft:
             while True:
+                if not self.err_queue.empty():
+                    raise SteamApiError("Couldn't initialize Steam API")
+
                 processesNum = len(multiprocessing.active_children())
                 log.debug("Number of children processes: %s" % processesNum)
 
                 if processesNum < self.threadsToIdle:
                     process = multiprocessing.Process(target=self.__idle_process, args=(game,), name=game["title"])
                     process.start()
-                    time.sleep(1)
                     break
                 else:
-                    time.sleep(15)
+                    time.sleep(10)
 
         processesNum = len(multiprocessing.active_children())
         while processesNum > 0:
-            log.debug("Children processes: %s" % processesNum)
-            time.sleep(15)
+            if not self.err_queue.empty():
+                raise SteamApiError("Couldn't initialize Steam API")
+
+            log.debug("Wait %s children processes." % processesNum)
+            time.sleep(10)
             processesNum = len(multiprocessing.active_children())
 
         log.info("All cards recive.")
 
+    def stop(self):
+        for child in multiprocessing.active_children():
+            child.terminate()
+
+        sys.exit()
 
     def __idle_process(self, game):
+        try:
             gameId = game["id"]
             badgeURL = game["url"]
             badgeDropLeft = game["cards"]
@@ -146,7 +160,11 @@ class IdleBot:
                 apiInit = int(steam_api.SteamAPI_Init())
                 os.dup2(stderr, 2)
                 if not apiInit:
-                    raise SteanApiError("Couldn't initialize Steam API")
+                    name = multiprocessing.current_process().name
+                    status = "ERROR"
+                    self.err_queue.put("%(name)s: %(status)s" % {"name": name, "status": status})
+                    log.debug("Couldn't initialize Steam API")
+                    self.stop()
 
                 log.debug("Idle %02d:%02d min." % divmod(self.idleTime, 60))
                 time.sleep(self.idleTime)
@@ -162,6 +180,9 @@ class IdleBot:
                     log.info("Continuing idle game «%s» to get %s cards" % (gameTitle, badgeDropLeft))
 
             log.info("End «%s» game idle " % gameTitle)
+        except KeyboardInterrupt:
+            log.debug("Interrupted by user.")
+            self.stop()
 
     def __get_steam_api(self):
         if sys.platform.startswith('win32'):
@@ -213,4 +234,10 @@ if __name__ == '__main__':
         sys.exit()
 
     idleBot = IdleBot(config, log=log)
-    idleBot.start()
+    try:
+        idleBot.start()
+    except KeyboardInterrupt:
+        log.info("Interrupted by user.")
+        idleBot.stop()
+    except SteamApiError:
+        idleBot.stop()
