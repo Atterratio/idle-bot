@@ -16,6 +16,8 @@ import bs4
 from optparse import OptionParser
 from ctypes import CDLL
 
+os.chdir(os.path.dirname(__file__))
+
 class Error(Exception):
     name = None
     def __init__(self, message):
