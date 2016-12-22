@@ -229,9 +229,9 @@ if __name__ == '__main__':
 
     config = configparser.ConfigParser()
     try:
-        config.read_file(open("config.ini"))
+        config.read_file(open("idle-bot.ini"))
     except FileNotFoundError:
-        log.error("No config file. Please copy «example.ini» as «config.ini» and edit it.")
+        log.error("No config file. Please copy «idle-bot.exp» as «idle-bot.ini» and edit it.")
         sys.exit()
 
     idleBot = IdleBot(config, log=log)

@@ -1,4 +1,4 @@
-#Copy this file as "config.ini"
+#Copy this file as "idle-bot.ini"
 [main]
 #Time in seconds to idle before check card drop
 idleTime: 300
