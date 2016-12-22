@@ -166,7 +166,6 @@ class IdleBot:
                     status = "ERROR"
                     self.err_queue.put("%(name)s: %(status)s" % {"name": name, "status": status})
                     log.debug("Couldn't initialize Steam API")
-                    self.stop()
 
                 log.debug("Idle %02d:%02d min." % divmod(self.idleTime, 60))
                 time.sleep(self.idleTime)
