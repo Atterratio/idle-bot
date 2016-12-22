@@ -239,5 +239,5 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         log.info("Interrupted by user.")
         idleBot.stop()
-    except SteamApiError:
+    except (SteamApiError, AuthError, ArchitectureError, OSError):
         idleBot.stop()
