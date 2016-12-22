@@ -1,7 +1,7 @@
 Python Idle Master Reborn
 ===========
 
-v0.0.1
+v0.1.0
 -------
 
 This program will determine which of your Steam games still have Steam Trading Card drops remaining, and will go through each application to simulate you being “in-game” so that cards will drop.
