@@ -54,15 +54,16 @@ class IdleBot:
         if not self.idleTime:
             self.idleTime = 300
 
-        self.threadsToIdle = int(config["main"]["idlethreads"])
-        if not self.threadsToIdle:
-            self.threadsToIdle = 1
+        self.idleGames = int(config["main"]["idleGames"])
+        if not self.idleGames:
+            self.idleGames = 1
 
         self.log_level = log_level
         self.__logger()
 
-        self.idle = False
         self.err_queue = multiprocessing.Queue()
+
+        self.gamesInProgress = []
 
     def __logger(self):
         self.log = logging.getLogger('Bot')
@@ -137,32 +138,16 @@ class IdleBot:
                     self.err_queue.put(msg)
                     raise SteamApiError(msg)
 
-                processesNum = len(multiprocessing.active_children())
-                self.log.debug("Number of children processes: %s" % processesNum)
-
-                if processesNum < self.threadsToIdle:
-                    process = multiprocessing.Process(target=self.idle_process, args=(game, ), name=game["title"], )
+                if len(self.gamesInProgress) < self.idleGames:
+                    process = multiprocessing.Process(target=self.idle_process, args=(game, ), name=game["title"])
                     process.start()
-                    time.sleep(1)
+                    self.log.info("Starting idle game «%s» to get %s cards" % (game["title"], game["cards"]))
+                    self.gamesInProgress.append(game)
                     break
                 else:
-                    time.sleep(10)
+                    self.idle_games()
 
-        processesNum = len(multiprocessing.active_children())
-        if not self.err_queue.empty():
-            msg = self.err_queue.get()
-            self.err_queue.put(msg)
-            raise SteamApiError(msg)
-
-        while processesNum > 0:
-            if not self.err_queue.empty():
-                msg = self.err_queue.get()
-                self.err_queue.put(msg)
-                raise SteamApiError(msg)
-
-            self.log.debug("Wait %s children processes." % processesNum)
-            time.sleep(10)
-            processesNum = len(multiprocessing.active_children())
+        self.idle_games()
 
         self.log.info("All cards recive.")
 
@@ -172,70 +157,91 @@ class IdleBot:
 
         sys.exit()
 
+    def idle_games(self):
+        time.sleep(5)
+        if not self.err_queue.empty():
+            msg = self.err_queue.get()
+            self.err_queue.put(msg)
+            raise SteamApiError(msg)
+
+        self.log.debug("Idle %02d:%02d min." % divmod(self.idleTime, 60))
+        time.sleep(self.idleTime)
+
+        for child in multiprocessing.active_children():
+            child.terminate()
+
+        time.sleep(5)
+        newGamesInProgress = []
+        for game in self.gamesInProgress:
+            self.log.debug("Check cards left for «%s» game" % game["title"])
+            badge_req = requests.get(game["url"], cookies=self.cookies)
+            badgeData = bs4.BeautifulSoup(badge_req.text, "lxml")
+            newBadgeDropLeft = int(
+                re.findall("\d+", badgeData.find("span", {"class": "progress_info_bold"}).get_text())[0])
+            if newBadgeDropLeft > 0:
+                if game['cards'] != newBadgeDropLeft:
+                    game['cards'] = newBadgeDropLeft
+                    process = multiprocessing.Process(target=self.idle_process, args=(game,), name=game["title"])
+                    process.start()
+                    self.log.info("Continuing idle game «%s» to get %s cards" % (game["title"], game['cards']))
+                else:
+                    process = multiprocessing.Process(target=self.idle_process, args=(game,), name=game["title"])
+                    process.start()
+
+                newGamesInProgress.append(game)
+
+        self.gamesInProgress = newGamesInProgress
+
     def idle_process(self, game):
         try:
-            gameId = game["id"]
-            badgeURL = game["url"]
-            badgeDropLeft = game["cards"]
-            gameTitle = game["title"]
-
-            self.log.info("Starting idle game «%s» to get %s cards" % (gameTitle, badgeDropLeft))
-
-            try:
-                steam_api = self.__get_steam_api()
-            except:
-                self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
-                time.sleep(self.idleTime)
-
-            while badgeDropLeft > 0:
-                os.environ["SteamAppId"] = str(gameId)
-                stderr = os.dup(2)
-                silent = os.open(os.devnull, os.O_WRONLY)
-                os.dup2(silent, 2)
-                apiInit = int(steam_api.SteamAPI_Init())
-                os.dup2(stderr, 2)
-                if not apiInit:
+            if sys.platform.startswith('win32'):
+                self.log.debug('Loading Windows library')
+                try:
+                    steam_api = CDLL('steam_api.dll')
+                except:
                     self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
                     time.sleep(self.idleTime)
+            elif sys.platform.startswith('linux'):
+                if platform.architecture()[0].startswith('32bit'):
+                    self.log.debug('Loading Linux 32bit library')
+                    try:
+                        steam_api = CDLL('./libsteam_api32.so')
+                    except:
+                        self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
+                        time.sleep(self.idleTime)
+                elif platform.architecture()[0].startswith('64bit'):
+                    self.log.debug('Loading Linux 64bit library')
+                    try:
+                        steam_api = CDLL('./libsteam_api64.so')
+                    except:
+                        self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
+                        time.sleep(self.idleTime)
+                else:
+                    raise ArchitectureError('Linux architecture not supported')
+            elif sys.platform.startswith('darwin'):
+                self.log.debug('Loading OSX library')
+                try:
+                    steam_api = CDLL('./libsteam_api.dylib')
+                except:
+                    self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
+                    time.sleep(self.idleTime)
+            else:
+                raise OSError('Operating system not supported')
 
-                self.log.debug("Idle %02d:%02d min." % divmod(self.idleTime, 60))
-                time.sleep(self.idleTime)
+            os.environ["SteamAppId"] = str(game['id'])
+            stderr = os.dup(2)
+            silent = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(silent, 2)
+            apiInit = int(steam_api.SteamAPI_Init())
+            os.dup2(stderr, 2)
+            if not apiInit:
+                self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
 
-                steam_api.SteamAPI_Shutdown()
-
-                self.log.debug("Check cards left for «%s» game" % gameTitle)
-                badge_req = requests.get(badgeURL, cookies=self.cookies)
-                badgeData = bs4.BeautifulSoup(badge_req.text, "lxml")
-                badgeDropLeftOld = badgeDropLeft
-                badgeDropLeft = int(re.findall("\d+", badgeData.find("span", {"class": "progress_info_bold"}).get_text())[0])
-                if badgeDropLeft > 0 and badgeDropLeftOld != badgeDropLeft:
-                    self.log.info("Continuing idle game «%s» to get %s cards" % (gameTitle, badgeDropLeft))
-
-            self.log.info("End «%s» game idle " % gameTitle)
+            while True:
+                time.sleep(3000)
         except KeyboardInterrupt:
             self.log.debug("Interrupted by user.")
             self.stop()
-
-    def __get_steam_api(self):
-        if sys.platform.startswith('win32'):
-            self.log.debug('Loading Windows library')
-            steam_api = CDLL('steam_api.dll')
-        elif sys.platform.startswith('linux'):
-            if platform.architecture()[0].startswith('32bit'):
-                self.log.debug('Loading Linux 32bit library')
-                steam_api = CDLL('./libsteam_api32.so')
-            elif platform.architecture()[0].startswith('64bit'):
-                self.log.debug('Loading Linux 64bit library')
-                steam_api = CDLL('./libsteam_api64.so')
-            else:
-                raise ArchitectureError('Linux architecture not supported')
-        elif sys.platform.startswith('darwin'):
-            self.log.debug('Loading OSX library')
-            steam_api = CDLL('./libsteam_api.dylib')
-        else:
-            raise OSError('Operating system not supported')
-
-        return steam_api
 
 
 if __name__ == '__main__':
