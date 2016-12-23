@@ -133,7 +133,9 @@ class IdleBot:
         for game in badgesLeft:
             while True:
                 if not self.err_queue.empty():
-                    raise SteamApiError("Couldn't initialize Steam API")
+                    msg = self.err_queue.get()
+                    self.err_queue.put(msg)
+                    raise SteamApiError(msg)
 
                 processesNum = len(multiprocessing.active_children())
                 self.log.debug("Number of children processes: %s" % processesNum)
@@ -141,14 +143,22 @@ class IdleBot:
                 if processesNum < self.threadsToIdle:
                     process = multiprocessing.Process(target=self.idle_process, args=(game, ), name=game["title"], )
                     process.start()
+                    time.sleep(1)
                     break
                 else:
                     time.sleep(10)
 
         processesNum = len(multiprocessing.active_children())
+        if not self.err_queue.empty():
+            msg = self.err_queue.get()
+            self.err_queue.put(msg)
+            raise SteamApiError(msg)
+
         while processesNum > 0:
             if not self.err_queue.empty():
-                raise SteamApiError("Couldn't initialize Steam API")
+                msg = self.err_queue.get()
+                self.err_queue.put(msg)
+                raise SteamApiError(msg)
 
             self.log.debug("Wait %s children processes." % processesNum)
             time.sleep(10)
@@ -171,7 +181,11 @@ class IdleBot:
 
             self.log.info("Starting idle game «%s» to get %s cards" % (gameTitle, badgeDropLeft))
 
-            steam_api = self.__get_steam_api()
+            try:
+                steam_api = self.__get_steam_api()
+            except:
+                self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
+                time.sleep(self.idleTime)
 
             while badgeDropLeft > 0:
                 os.environ["SteamAppId"] = str(gameId)
@@ -181,10 +195,8 @@ class IdleBot:
                 apiInit = int(steam_api.SteamAPI_Init())
                 os.dup2(stderr, 2)
                 if not apiInit:
-                    name = multiprocessing.current_process().name
-                    status = "ERROR"
-                    self.err_queue.put("%(name)s: %(status)s" % {"name": name, "status": status})
-                    self.log.debug("Couldn't initialize Steam API")
+                    self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
+                    time.sleep(self.idleTime)
 
                 self.log.debug("Idle %02d:%02d min." % divmod(self.idleTime, 60))
                 time.sleep(self.idleTime)
