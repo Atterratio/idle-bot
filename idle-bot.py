@@ -59,6 +59,13 @@ class IdleBot:
             self.idleGames = 1
 
         self.log_level = log_level
+        self.log = logging.getLogger('Bot')
+        formatter = logging.Formatter('[%(asctime)s][%(name)s][%(processName)s][%(levelname)s]: %(message)s',
+                                      "%Y-%m-%d %H:%M:%S")
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        self.log.addHandler(console)
+        self.log.setLevel(self.log_level)
         self.__logger()
 
         self.err_queue = multiprocessing.Queue()
@@ -67,12 +74,6 @@ class IdleBot:
 
     def __logger(self):
         self.log = logging.getLogger('Bot')
-        formatter = logging.Formatter('[%(asctime)s][%(name)s][%(processName)s][%(levelname)s]: %(message)s',
-                                      "%Y-%m-%d %H:%M:%S")
-        console = logging.StreamHandler()
-        console.setFormatter(formatter)
-        self.log.addHandler(console)
-        self.log.setLevel(self.log_level)
 
     def __getstate__(self):
         self_dict = self.__dict__
@@ -141,13 +142,15 @@ class IdleBot:
                 if len(self.gamesInProgress) < self.idleGames:
                     process = multiprocessing.Process(target=self.idle_process, args=(game, ), name=game["title"])
                     process.start()
+                    self.__logger()
                     self.log.info("Starting idle game «%s» to get %s cards" % (game["title"], game["cards"]))
                     self.gamesInProgress.append(game)
                     break
                 else:
                     self.idle_games()
 
-        self.idle_games()
+        while self.gamesInProgress:
+            self.idle_games()
 
         self.log.info("All cards recive.")
 
@@ -183,10 +186,12 @@ class IdleBot:
                     game['cards'] = newBadgeDropLeft
                     process = multiprocessing.Process(target=self.idle_process, args=(game,), name=game["title"])
                     process.start()
+                    self.__logger()
                     self.log.info("Continuing idle game «%s» to get %s cards" % (game["title"], game['cards']))
                 else:
                     process = multiprocessing.Process(target=self.idle_process, args=(game,), name=game["title"])
                     process.start()
+                    self.__logger()
 
                 newGamesInProgress.append(game)
 
@@ -244,7 +249,8 @@ class IdleBot:
             self.stop()
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':    #
+    multiprocessing.set_start_method('spawn')  #set to usr start method lilke on windows
     opt_parser = OptionParser()
     opt_parser.add_option("--debug", action="store_true", dest="debug", default=False, help="Enable debug messanges")
     options, args = opt_parser.parse_args()
