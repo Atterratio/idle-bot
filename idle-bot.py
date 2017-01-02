@@ -179,8 +179,7 @@ class IdleBot:
             self.log.debug("Check cards left for «%s» game" % game["title"])
             badge_req = requests.get(game["url"], cookies=self.cookies)
             badgeData = bs4.BeautifulSoup(badge_req.text, "lxml")
-            newBadgeDropLeft = int(
-                re.findall("\d+", badgeData.find("span", {"class": "progress_info_bold"}).get_text())[0])
+            newBadgeDropLeft = int(re.findall("\d+", badgeData.find("span", {"class": "progress_info_bold"}).get_text())[0])
             if newBadgeDropLeft > 0:
                 if game['cards'] != newBadgeDropLeft:
                     game['cards'] = newBadgeDropLeft
@@ -193,7 +192,13 @@ class IdleBot:
                     process.start()
                     self.__logger()
 
+
                 newGamesInProgress.append(game)
+
+            else:
+                self.__logger()
+                self.log.info("Stoping idle game «%s»" % game["title"])
+
 
         self.gamesInProgress = newGamesInProgress
 
