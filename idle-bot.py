@@ -69,7 +69,7 @@ class IdleBot:
         badgesURL = "%s/badges/" % profileURL
 
         badges_req = requests.get(badgesURL, cookies=self.cookies)
-        badgePageData = bs4.BeautifulSoup(badges_req.text, "lxml")
+        badgePageData = bs4.BeautifulSoup(badges_req.text, "html.parser")
 
         auth = badgePageData.find("a",{"class": "user_avatar"}) != None
         if not auth:
@@ -87,7 +87,7 @@ class IdleBot:
         currentPage = 1
         while currentPage <= badgePages:
             badges_req = requests.get("%(url)s?p=%(page)s" % {"url": badgesURL, "page": currentPage}, cookies=self.cookies)
-            badgePageData = bs4.BeautifulSoup(badges_req.text, "lxml")
+            badgePageData = bs4.BeautifulSoup(badges_req.text, "html.parser")
             badgeSet = badgeSet + badgePageData.find_all("div", {"class": "badge_row"})
             currentPage += 1
 
@@ -153,7 +153,7 @@ class IdleBot:
         for game in self.gamesInProgress:
             self.log.debug("Check cards left for «%s» game" % game["title"])
             badge_req = requests.get(game["url"], cookies=self.cookies)
-            badgeData = bs4.BeautifulSoup(badge_req.text, "lxml")
+            badgeData = bs4.BeautifulSoup(badge_req.text, "html.parser")
             newBadgeDropLeft = int(re.findall("\d+", badgeData.find("span", {"class": "progress_info_bold"}).get_text())[0])
             if newBadgeDropLeft > 0:
                 if game['cards'] != newBadgeDropLeft:
