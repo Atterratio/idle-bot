@@ -165,7 +165,13 @@ class IdleBot:
                     process = multiprocessing.Process(target=idle_process, args=(game, self.err_queue, self.idleTime), name=game["title"])
                     process.start()
 
+
                 newGamesInProgress.append(game)
+
+            else:
+                self.__logger()
+                self.log.info("Stoping idle game «%s»" % game["title"])
+
 
         self.gamesInProgress = newGamesInProgress
 
