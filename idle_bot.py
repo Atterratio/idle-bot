@@ -44,6 +44,7 @@ class OSError(Error):
 
 class IdleBot:
     def __init__(self, config, log):
+        self.config = config
         if not config["auth"]["sessionid"]:
             raise AuthError("«sessionid» not set")
         if not config["auth"]["steamLogin"]:
@@ -65,7 +66,7 @@ class IdleBot:
         self.gamesInProgress = []
 
     def start(self):
-        profileURL = "http://steamcommunity.com/profiles/%s" % config["auth"]["steamLogin"][:17]
+        profileURL = "http://steamcommunity.com/profiles/%s" % self.config["auth"]["steamLogin"][:17]
         badgesURL = "%s/badges/" % profileURL
 
         badges_req = requests.get(badgesURL, cookies=self.cookies)
@@ -251,9 +252,9 @@ if __name__ == '__main__':    #
 
     config = configparser.ConfigParser()
     try:
-        config.read_file(open("idle-bot.ini"))
+        config.read_file(open("idle_bot.ini"))
     except FileNotFoundError:
-        log.error("No config file. Please copy «idle-bot.exp» as «idle-bot.ini» and edit it.")
+        log.error("No config file. Please copy «idle_bot.exp» as «idle_bot.ini» and edit it.")
         sys.exit()
 
     idleBot = IdleBot(config, log)
