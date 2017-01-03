@@ -8,8 +8,8 @@ This program will determine which of your Steam games still have Steam Trading C
 
 Many thanks to https://github.com/jshackles for source code to start.
 
-Copy "example.ini" as "config.ini" and edit it before start.
-I'm not shire that this work on Mac or Windows, or Python2.
+Copy "idle-bot.exp" as "idle-bot.ini" and edit it before start.
+I'm not sure that this work on Mac or Windows, or Python2.
 
 Changes
 -------
