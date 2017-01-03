@@ -6,7 +6,6 @@ import logging
 import configparser
 import requests
 import re
-import subprocess
 import time
 import multiprocessing
 import platform
@@ -43,7 +42,8 @@ class OSError(Error):
     pass
 
 class IdleBot:
-    def __init__(self, config, log_level=logging.INFO):
+    def __init__(self, config, log):
+        self.config = config
         if not config["auth"]["sessionid"]:
             raise AuthError("«sessionid» not set")
         if not config["auth"]["steamLogin"]:
@@ -58,42 +58,18 @@ class IdleBot:
         if not self.idleGames:
             self.idleGames = 1
 
-        self.log_level = log_level
-        self.log = logging.getLogger('Bot')
-        formatter = logging.Formatter('[%(asctime)s][%(name)s][%(processName)s][%(levelname)s]: %(message)s',
-                                      "%Y-%m-%d %H:%M:%S")
-        console = logging.StreamHandler()
-        console.setFormatter(formatter)
-        self.log.addHandler(console)
-        self.log.setLevel(self.log_level)
-        self.__logger()
+        self.log = log
 
         self.err_queue = multiprocessing.Queue()
 
         self.gamesInProgress = []
 
-    def __logger(self):
-        self.log = logging.getLogger('Bot')
-
-    def __getstate__(self):
-        self_dict = self.__dict__
-        try:
-            self_dict.pop('log')
-        except:
-            pass
-
-        return self_dict
-
-    def __setstate__(self, d):
-        self.__dict__.update(d)
-        self.__logger()
-
     def start(self):
-        profileURL = "http://steamcommunity.com/profiles/%s" % config["auth"]["steamLogin"][:17]
+        profileURL = "http://steamcommunity.com/profiles/%s" % self.config["auth"]["steamLogin"][:17]
         badgesURL = "%s/badges/" % profileURL
 
-        badges_req = requests.get(badgesURL, cookies=self.cookies)
-        badgePageData = bs4.BeautifulSoup(badges_req.text, "lxml")
+        badges_html = requests.get(badgesURL, cookies=self.cookies).text
+        badgePageData = bs4.BeautifulSoup(badges_html, "html.parser")
 
         auth = badgePageData.find("a",{"class": "user_avatar"}) != None
         if not auth:
@@ -110,8 +86,8 @@ class IdleBot:
         cardsLeft = 0
         currentPage = 1
         while currentPage <= badgePages:
-            badges_req = requests.get("%(url)s?p=%(page)s" % {"url": badgesURL, "page": currentPage}, cookies=self.cookies)
-            badgePageData = bs4.BeautifulSoup(badges_req.text, "lxml")
+            badges_html = requests.get("%(url)s?p=%(page)s" % {"url": badgesURL, "page": currentPage}, cookies=self.cookies).text
+            badgePageData = bs4.BeautifulSoup(badges_html, "html.parser")
             badgeSet = badgeSet + badgePageData.find_all("div", {"class": "badge_row"})
             currentPage += 1
 
@@ -140,9 +116,8 @@ class IdleBot:
                     raise SteamApiError(msg)
 
                 if len(self.gamesInProgress) < self.idleGames:
-                    process = multiprocessing.Process(target=self.idle_process, args=(game, ), name=game["title"])
+                    process = multiprocessing.Process(target=idle_process, args=(game, self.err_queue, self.idleTime), name=game["title"])
                     process.start()
-                    self.__logger()
                     self.log.info("Starting idle game «%s» to get %s cards" % (game["title"], game["cards"]))
                     self.gamesInProgress.append(game)
                     break
@@ -177,85 +152,84 @@ class IdleBot:
         newGamesInProgress = []
         for game in self.gamesInProgress:
             self.log.debug("Check cards left for «%s» game" % game["title"])
-            badge_req = requests.get(game["url"], cookies=self.cookies)
-            badgeData = bs4.BeautifulSoup(badge_req.text, "lxml")
+            badges_html = requests.get(game["url"], cookies=self.cookies).text
+            badgeData = bs4.BeautifulSoup(badges_html, "html.parser")
             newBadgeDropLeft = int(re.findall("\d+", badgeData.find("span", {"class": "progress_info_bold"}).get_text())[0])
             if newBadgeDropLeft > 0:
                 if game['cards'] != newBadgeDropLeft:
                     game['cards'] = newBadgeDropLeft
-                    process = multiprocessing.Process(target=self.idle_process, args=(game,), name=game["title"])
+                    process = multiprocessing.Process(target=idle_process, args=(game, self.err_queue, self.idleTime), name=game["title"])
                     process.start()
-                    self.__logger()
                     self.log.info("Continuing idle game «%s» to get %s cards" % (game["title"], game['cards']))
                 else:
-                    process = multiprocessing.Process(target=self.idle_process, args=(game,), name=game["title"])
+                    process = multiprocessing.Process(target=idle_process, args=(game, self.err_queue, self.idleTime), name=game["title"])
                     process.start()
-                    self.__logger()
 
 
                 newGamesInProgress.append(game)
 
             else:
-                self.__logger()
                 self.log.info("Stoping idle game «%s»" % game["title"])
-
 
         self.gamesInProgress = newGamesInProgress
 
-    def idle_process(self, game):
-        try:
-            if sys.platform.startswith('win32'):
-                self.log.debug('Loading Windows library')
+
+def idle_process(game, err_queue, idle):
+    try:
+        if sys.platform.startswith('win32'):
+            try:
+                steam_api = CDLL('steam_api.dll')
+            except:
+                err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
+                time.sleep(idle)
+
+        elif sys.platform.startswith('linux'):
+            if platform.architecture()[0].startswith('32bit'):
                 try:
-                    steam_api = CDLL('steam_api.dll')
+                    steam_api = CDLL('./libsteam_api32.so')
                 except:
-                    self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
-                    time.sleep(self.idleTime)
-            elif sys.platform.startswith('linux'):
-                if platform.architecture()[0].startswith('32bit'):
-                    self.log.debug('Loading Linux 32bit library')
-                    try:
-                        steam_api = CDLL('./libsteam_api32.so')
-                    except:
-                        self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
-                        time.sleep(self.idleTime)
-                elif platform.architecture()[0].startswith('64bit'):
-                    self.log.debug('Loading Linux 64bit library')
-                    try:
-                        steam_api = CDLL('./libsteam_api64.so')
-                    except:
-                        self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
-                        time.sleep(self.idleTime)
-                else:
-                    raise ArchitectureError('Linux architecture not supported')
-            elif sys.platform.startswith('darwin'):
-                self.log.debug('Loading OSX library')
+                    err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
+                    time.sleep(idle)
+
+            elif platform.architecture()[0].startswith('64bit'):
                 try:
-                    steam_api = CDLL('./libsteam_api.dylib')
+                    steam_api = CDLL('./libsteam_api64.so')
                 except:
-                    self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
-                    time.sleep(self.idleTime)
+                    err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
+                    time.sleep(idle)
             else:
-                raise OSError('Operating system not supported')
+                raise ArchitectureError('Linux architecture not supported')
 
-            os.environ["SteamAppId"] = str(game['id'])
-            stderr = os.dup(2)
-            silent = os.open(os.devnull, os.O_WRONLY)
-            os.dup2(silent, 2)
-            apiInit = int(steam_api.SteamAPI_Init())
-            os.dup2(stderr, 2)
-            if not apiInit:
-                self.err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
+        elif sys.platform.startswith('darwin'):
+            try:
+                steam_api = CDLL('./libsteam_api.dylib')
+            except:
+                err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
+                time.sleep(idle)
+        else:
+            raise OSError('Operating system not supported')
 
-            while True:
-                time.sleep(3000)
-        except KeyboardInterrupt:
-            self.log.debug("Interrupted by user.")
-            self.stop()
+        os.environ["SteamAppId"] = str(game['id'])
+        stderr = os.dup(2)
+        silent = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(silent, 2)
+        apiInit = int(steam_api.SteamAPI_Init())
+        os.dup2(stderr, 2)
+        if not apiInit:
+            err_queue.put("Couldn't initialize Steam API. Make sure that Steam is running.")
+
+        while True:
+            time.sleep(idle)
+
+    except KeyboardInterrupt:
+        for child in multiprocessing.active_children():
+            child.terminate()
+
+        sys.exit()
 
 
-if __name__ == '__main__':    #
-    multiprocessing.set_start_method('spawn')  #set to usr start method lilke on windows
+if __name__ == '__main__':
+    #multiprocessing.set_start_method('spawn')  #set to usr start method lilke on windows
     opt_parser = OptionParser()
     opt_parser.add_option("--debug", action="store_true", dest="debug", default=False, help="Enable debug messanges")
     options, args = opt_parser.parse_args()
@@ -277,12 +251,12 @@ if __name__ == '__main__':    #
 
     config = configparser.ConfigParser()
     try:
-        config.read_file(open("idle-bot.ini"))
+        config.read_file(open("idle_bot.ini"))
     except FileNotFoundError:
-        log.error("No config file. Please copy «idle-bot.exp» as «idle-bot.ini» and edit it.")
+        log.error("No config file. Please copy «idle_bot.exp» as «idle_bot.ini» and edit it.")
         sys.exit()
 
-    idleBot = IdleBot(config, log_level=log_level)
+    idleBot = IdleBot(config, log)
     try:
         idleBot.start()
     except KeyboardInterrupt:
