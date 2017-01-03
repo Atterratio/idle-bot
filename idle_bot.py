@@ -6,7 +6,6 @@ import logging
 import configparser
 import requests
 import re
-import subprocess
 import time
 import multiprocessing
 import platform
@@ -69,8 +68,8 @@ class IdleBot:
         profileURL = "http://steamcommunity.com/profiles/%s" % self.config["auth"]["steamLogin"][:17]
         badgesURL = "%s/badges/" % profileURL
 
-        badges_req = requests.get(badgesURL, cookies=self.cookies)
-        badgePageData = bs4.BeautifulSoup(badges_req.text, "html.parser")
+        badges_html = requests.get(badgesURL, cookies=self.cookies).text
+        badgePageData = bs4.BeautifulSoup(badges_html, "html.parser")
 
         auth = badgePageData.find("a",{"class": "user_avatar"}) != None
         if not auth:
@@ -87,8 +86,8 @@ class IdleBot:
         cardsLeft = 0
         currentPage = 1
         while currentPage <= badgePages:
-            badges_req = requests.get("%(url)s?p=%(page)s" % {"url": badgesURL, "page": currentPage}, cookies=self.cookies)
-            badgePageData = bs4.BeautifulSoup(badges_req.text, "html.parser")
+            badges_html = requests.get("%(url)s?p=%(page)s" % {"url": badgesURL, "page": currentPage}, cookies=self.cookies).text
+            badgePageData = bs4.BeautifulSoup(badges_html, "html.parser")
             badgeSet = badgeSet + badgePageData.find_all("div", {"class": "badge_row"})
             currentPage += 1
 
@@ -153,8 +152,8 @@ class IdleBot:
         newGamesInProgress = []
         for game in self.gamesInProgress:
             self.log.debug("Check cards left for «%s» game" % game["title"])
-            badge_req = requests.get(game["url"], cookies=self.cookies)
-            badgeData = bs4.BeautifulSoup(badge_req.text, "html.parser")
+            badges_html = requests.get(game["url"], cookies=self.cookies).text
+            badgeData = bs4.BeautifulSoup(badges_html, "html.parser")
             newBadgeDropLeft = int(re.findall("\d+", badgeData.find("span", {"class": "progress_info_bold"}).get_text())[0])
             if newBadgeDropLeft > 0:
                 if game['cards'] != newBadgeDropLeft:
@@ -229,7 +228,7 @@ def idle_process(game, err_queue, idle):
         sys.exit()
 
 
-if __name__ == '__main__':    #
+if __name__ == '__main__':
     #multiprocessing.set_start_method('spawn')  #set to usr start method lilke on windows
     opt_parser = OptionParser()
     opt_parser.add_option("--debug", action="store_true", dest="debug", default=False, help="Enable debug messanges")
