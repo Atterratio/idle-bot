@@ -169,9 +169,7 @@ class IdleBot:
                 newGamesInProgress.append(game)
 
             else:
-                self.__logger()
                 self.log.info("Stoping idle game «%s»" % game["title"])
-
 
         self.gamesInProgress = newGamesInProgress
 
