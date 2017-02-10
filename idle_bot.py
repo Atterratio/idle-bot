@@ -15,35 +15,58 @@ import bs4
 from optparse import OptionParser
 from ctypes import CDLL
 
+try:
+    import lxml
+except:
+    PARSER = "html.parser"
+else:
+    PARSER = "lxml"
+
 os.chdir(os.path.dirname(__file__))
+
 
 class Error(Exception):
     name = None
+
     def __init__(self, message):
         log = logging.getLogger(self.name)
-        formatter = logging.Formatter('[%(asctime)s][%(name)s][%(processName)s][%(levelname)s]: %(message)s', "%Y-%m-%d %H:%M:%S")
-        console = logging.StreamHandler()
-        console.setFormatter(formatter)
-        log.addHandler(console)
+        if not log.hasHandlers():
+            formatter = logging.Formatter('[%(asctime)s][%(name)s][%(processName)s][%(levelname)s]: %(message)s', "%Y-%m-%d %H:%M:%S")
+            console = logging.StreamHandler()
+            console.setFormatter(formatter)
+            log.addHandler(console)
         log.setLevel(logging.ERROR)
-
         log.error(message)
+
 
 class AuthError(Error):
     name = "Auth"
 
+
 class SteamApiError(Error):
     name = "Steam Api"
+
 
 class ArchitectureError(Error):
     pass
 
+
 class OSError(Error):
     pass
 
+
 class IdleBot:
-    def __init__(self, config, log):
+    def __init__(self, config, log_level):
         self.config = config
+
+        self.log = logging.getLogger('Bot')
+        if not self.log.hasHandlers():
+            formatter = logging.Formatter('[%(asctime)s][%(name)s][%(processName)s][%(levelname)s]: %(message)s', "%Y-%m-%d %H:%M:%S")
+            console = logging.StreamHandler()
+            console.setFormatter(formatter)
+            self.log.addHandler(console)
+        self.log.setLevel(log_level)
+
         if not config["auth"]["sessionid"]:
             raise AuthError("«sessionid» not set")
         if not config["auth"]["steamLogin"]:
@@ -58,8 +81,6 @@ class IdleBot:
         if not self.idleGames:
             self.idleGames = 1
 
-        self.log = log
-
         self.err_queue = multiprocessing.Queue()
 
         self.gamesInProgress = []
@@ -68,12 +89,12 @@ class IdleBot:
         profileURL = "http://steamcommunity.com/profiles/%s" % self.config["auth"]["steamLogin"][:17]
         badgesURL = "%s/badges/" % profileURL
 
-        badges_html = requests.get(badgesURL, cookies=self.cookies).text
-        badgePageData = bs4.BeautifulSoup(badges_html, "html.parser")
+        badges_html = requests.get('http://steamcommunity.com/', cookies=self.cookies).text
+        badgePageData = bs4.BeautifulSoup(badges_html, PARSER)
 
-        auth = badgePageData.find("a",{"class": "user_avatar"}) != None
+        auth = badgePageData.find("a",{"class": "user_avatar"})
         if not auth:
-            raise AuthError("Can't log in to Steam. Check cookie.")
+            raise AuthError("Can't login to Steam. Check cookie.")
 
         try:
             # TODO: find way cath error if trying find wrong tag
@@ -87,7 +108,7 @@ class IdleBot:
         currentPage = 1
         while currentPage <= badgePages:
             badges_html = requests.get("%(url)s?p=%(page)s" % {"url": badgesURL, "page": currentPage}, cookies=self.cookies).text
-            badgePageData = bs4.BeautifulSoup(badges_html, "html.parser")
+            badgePageData = bs4.BeautifulSoup(badges_html, PARSER)
             badgeSet = badgeSet + badgePageData.find_all("div", {"class": "badge_row"})
             currentPage += 1
 
@@ -116,7 +137,7 @@ class IdleBot:
                     raise SteamApiError(msg)
 
                 if len(self.gamesInProgress) < self.idleGames:
-                    process = multiprocessing.Process(target=idle_process, args=(game, self.err_queue, self.idleTime), name=game["title"])
+                    process = multiprocessing.Process(target=spawner, args=(game, self.err_queue, self.idleTime), name=game["title"])
                     process.start()
                     self.log.info("Starting idle game «%s» to get %s cards" % (game["title"], game["cards"]))
                     self.gamesInProgress.append(game)
@@ -136,7 +157,6 @@ class IdleBot:
         sys.exit()
 
     def idle_games(self):
-        time.sleep(5)
         if not self.err_queue.empty():
             msg = self.err_queue.get()
             self.err_queue.put(msg)
@@ -148,33 +168,31 @@ class IdleBot:
         for child in multiprocessing.active_children():
             child.terminate()
 
-        time.sleep(5)
-        newGamesInProgress = []
+        gamesInProgress = []
         for game in self.gamesInProgress:
             self.log.debug("Check cards left for «%s» game" % game["title"])
             badges_html = requests.get(game["url"], cookies=self.cookies).text
-            badgeData = bs4.BeautifulSoup(badges_html, "html.parser")
+            badgeData = bs4.BeautifulSoup(badges_html, PARSER)
             newBadgeDropLeft = int(re.findall("\d+", badgeData.find("span", {"class": "progress_info_bold"}).get_text())[0])
             if newBadgeDropLeft > 0:
                 if game['cards'] != newBadgeDropLeft:
                     game['cards'] = newBadgeDropLeft
-                    process = multiprocessing.Process(target=idle_process, args=(game, self.err_queue, self.idleTime), name=game["title"])
+                    process = multiprocessing.Process(target=spawner, args=(game, self.err_queue, self.idleTime), name=game["title"])
                     process.start()
+                    gamesInProgress.append(game)
                     self.log.info("Continuing idle game «%s» to get %s cards" % (game["title"], game['cards']))
                 else:
-                    process = multiprocessing.Process(target=idle_process, args=(game, self.err_queue, self.idleTime), name=game["title"])
+                    process = multiprocessing.Process(target=spawner, args=(game, self.err_queue, self.idleTime), name=game["title"])
                     process.start()
-
-
-                newGamesInProgress.append(game)
+                    gamesInProgress.append(game)
 
             else:
                 self.log.info("Stoping idle game «%s»" % game["title"])
 
-        self.gamesInProgress = newGamesInProgress
+        self.gamesInProgress = gamesInProgress
 
 
-def idle_process(game, err_queue, idle):
+def spawner(game, err_queue, idle):
     try:
         if sys.platform.startswith('win32'):
             try:
@@ -227,20 +245,20 @@ def idle_process(game, err_queue, idle):
 
         sys.exit()
 
-
-if __name__ == '__main__':
-    #multiprocessing.set_start_method('spawn')  #set to usr start method lilke on windows
+def main():
+    #multiprocessing.set_start_method('spawn')  #set mp start method like on windows for testing
     opt_parser = OptionParser()
     opt_parser.add_option("--debug", action="store_true", dest="debug", default=False, help="Enable debug messanges")
     options, args = opt_parser.parse_args()
 
     log = logging.getLogger('Main')
-    formatter = logging.Formatter('[%(asctime)s][%(name)s][%(processName)s][%(levelname)s]: %(message)s', "%Y-%m-%d %H:%M:%S")
-    console = logging.StreamHandler()
-    console.setFormatter(formatter)
-    log.addHandler(console)
+    if not log.hasHandlers():
+        formatter = logging.Formatter('[%(asctime)s][%(name)s][%(processName)s][%(levelname)s]: %(message)s', "%Y-%m-%d %H:%M:%S")
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        log.addHandler(console)
 
-    if options.debug == True:
+    if options.debug:
         log_level = logging.DEBUG
     else:
         log_level = logging.INFO
@@ -256,11 +274,14 @@ if __name__ == '__main__':
         log.error("No config file. Please copy «idle_bot.exp» as «idle_bot.ini» and edit it.")
         sys.exit()
 
-    idleBot = IdleBot(config, log)
+    bot = IdleBot(config, log_level)
     try:
-        idleBot.start()
+        bot.start()
     except KeyboardInterrupt:
         log.info("Interrupted by user.")
-        idleBot.stop()
-    except (SteamApiError, AuthError, ArchitectureError, OSError):
-        idleBot.stop()
+        bot.stop()
+    except Error:
+        bot.stop()
+
+if __name__ == '__main__':
+    main()
