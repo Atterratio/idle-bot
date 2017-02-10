@@ -17,10 +17,10 @@ Changes
 * No "GUI"
 * No Sorting
 * MultyGaming
-* Python3
 
 Requirements
 -------
+* `python3`
 * `steam_api` shared libs. You can copy it from installed steam game(for Linux rename it libsteam_api32.so or libsteam_api64.so ).
 * `requests`
 * `BeautifulSoup`
