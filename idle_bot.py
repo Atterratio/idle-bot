@@ -80,6 +80,10 @@ class IdleBot:
         self.idleGames = int(config["main"]["idleGames"])
         if not self.idleGames:
             self.idleGames = 1
+        try:
+            self.blacklist = [int(x.strip()) for x in config['main']['blacklist'].split(',') if x]
+        except:
+            self.blacklist = []
 
         self.err_queue = multiprocessing.Queue()
 
@@ -123,9 +127,9 @@ class IdleBot:
                 badgeId = int(re.findall("\d+", badgeURL)[0])
                 badgeTitle = badge.find("div", {"class": "badge_title"}).get_text().rsplit("\t", 1)[0].strip()
                 badgeData = {"id": badgeId, "url": badgeURL, "title": badgeTitle, "cards": dropCount}
-
-                badgesLeft.append(badgeData)
-                cardsLeft += dropCount
+                if badgeId not in self.blacklist:
+                    badgesLeft.append(badgeData)
+                    cardsLeft += dropCount
 
         self.log.info("Idle Master needs to idle %s games for %s cards" % (len(badgesLeft), cardsLeft))
 

@@ -5,6 +5,8 @@ idleTime: 300
 #Number for idle threads
 idleGames: 5
 #Increasing "idleTime" and decreasing "idleThreads" leads to reducing flood for friends and load to computer, but also cards drop rate.
+blacklist: 2
+#List of bages IDs, separated by comma, for skipping. It's useful for example for sales or community bages.
 
 [auth]
 #Paste cookies with the same name from http://steamcommunity.com/
