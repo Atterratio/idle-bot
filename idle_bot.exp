@@ -10,7 +10,6 @@ blacklist: 2
 
 [auth]
 #Paste cookies with the same name from http://steamcommunity.com/
-sessionid:
-steamLogin:
-#Replace "%7C%7C" to "||" in "steamLogin"
+steamLoginSecure:
+#Replace "%7C%7C" to "||" in "steamLoginSecure"
 

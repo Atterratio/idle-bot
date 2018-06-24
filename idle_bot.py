@@ -67,11 +67,9 @@ class IdleBot:
             self.log.addHandler(console)
         self.log.setLevel(log_level)
 
-        if not config["auth"]["sessionid"]:
-            raise AuthError("«sessionid» not set")
-        if not config["auth"]["steamLogin"]:
-            raise AuthError("«steamLogin» not set")
-        self.cookies = {"sessionid": config["auth"]["sessionid"], "steamLogin": config["auth"]["steamLogin"]}
+        if not config["auth"]["steamLoginSecure"]:
+            raise AuthError("«steamLoginSecure» not set")
+        self.cookies = {"steamLoginSecure": config["auth"]["steamLoginSecure"]}
 
         self.idleTime = int(config["main"]["idletime"])
         if not self.idleTime:
@@ -177,7 +175,11 @@ class IdleBot:
             self.log.debug("Check cards left for «%s» game" % game["title"])
             badges_html = requests.get(game["url"], cookies=self.cookies).text
             badgeData = bs4.BeautifulSoup(badges_html, PARSER)
-            newBadgeDropLeft = int(re.findall("\d+", badgeData.find("span", {"class": "progress_info_bold"}).get_text())[0])
+            try:
+                newBadgeDropLeft = int(re.findall("\d+", badgeData.find("span", {"class": "progress_info_bold"}).get_text())[0])
+            except (IndexError, AttributeError):
+                newBadgeDropLeft = 0
+
             if newBadgeDropLeft > 0:
                 if game['cards'] != newBadgeDropLeft:
                     game['cards'] = newBadgeDropLeft
@@ -203,31 +205,18 @@ def spawner(game, err_queue, idle):
                 steam_api = CDLL('steam_api.dll')
             except:
                 err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
-                time.sleep(idle)
 
         elif sys.platform.startswith('linux'):
-            if platform.architecture()[0].startswith('32bit'):
-                try:
-                    steam_api = CDLL('./libsteam_api32.so')
-                except:
-                    err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
-                    time.sleep(idle)
-
-            elif platform.architecture()[0].startswith('64bit'):
-                try:
-                    steam_api = CDLL('./libsteam_api64.so')
-                except:
-                    err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
-                    time.sleep(idle)
-            else:
-                raise ArchitectureError('Linux architecture not supported')
+            try:
+                steam_api = CDLL('./libsteam_api.so')
+            except:
+                err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
 
         elif sys.platform.startswith('darwin'):
             try:
                 steam_api = CDLL('./libsteam_api.dylib')
             except:
                 err_queue.put("Couldn't initialize Steam API. Make sure that in bot folder have steam_api library.")
-                time.sleep(idle)
         else:
             raise OSError('Operating system not supported')
 
